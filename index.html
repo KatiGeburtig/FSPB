@@ -48,6 +48,17 @@
             max-width: 300px;
         }
 
+        #uiControls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
         @keyframes shake {
 
             0%,
@@ -67,18 +78,76 @@
         .building-collision {
             animation: shake 0.3s ease-in-out;
         }
+        #coordsPanel {
+            position: absolute;
+            top: 70px;
+            left: 10px;
+            z-index: 1000;
+            background: rgba(0,0,0,0.85);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            min-width: 220px;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        .coord-row { margin: 8px 0; }
+        .coord-label { color: #4CAF50; font-weight: bold; min-width: 70px; display: inline-block; }
+        input[type="number"] { 
+            width: 90px; padding: 4px; 
+            background: #333; color: white; 
+            border: 1px solid #555; border-radius: 3px;
+        }
+
     </style>
 </head>
 
 <body>
     <div id="cesiumContainer"></div>
     <button id="streetViewBtn">Street View Berlin</button>
-    <div id="info">
+    <div id="info" >
         <strong>Controls:</strong><br>
-        WASD = Duck movement/rotation<br>
-        Arrows = Tower movement/rotation<br>
+        Arrows = Duck movement/rotation<br>
         Mouse = Look around
     </div>
+
+    <div id="coordsPanel">
+        <div class="coord-row"><span class="coord-label">📍 Lon:</span> <span id="currentLon">13.4050</span></div>
+        <div class="coord-row"><span class="coord-label">📍 Lat:</span> <span id="currentLat">52.5200</span></div>
+        <div class="coord-row"><span class="coord-label">🎯 Hdg:</span> <span id="currentHeading">0°</span></div>
+        
+        <hr style="margin: 12px 0; border-color: #555;">
+        
+        <div class="coord-row">
+            <span class="coord-label">New Lon:</span>
+            <input type="number" id="newLon" step="any" value="13.4050">
+        </div>
+        <div class="coord-row">
+            <span class="coord-label">New Lat:</span>
+            <input type="number" id="newLat" step="any" value="52.5200">
+        </div>
+        <div class="coord-row">
+            <span class="coord-label">Heading:</span>
+            <input type="number" id="newHeading" value="0">
+        </div>
+        <button id="updateBtn">✨ Teleport Duck</button>
+    </div>
+
+  <!-- On-screen controls -->
+  <div id="uiControls">
+    <div class="control-row">
+      <button class="ctrl-btn" id="zoomInBtn">Zoom +</button>
+      <button class="ctrl-btn" id="zoomOutBtn">Zoom -</button>
+    </div>
+    <!--<div class="control-row">
+      <button class="ctrl-btn" id="turnLeftBtn">↺</button>
+      <button class="ctrl-btn" id="forwardBtn">↑</button>
+      <button class="ctrl-btn" id="turnRightBtn">↻</button>
+    </div>
+    <div class="control-row">
+      <button class="ctrl-btn" id="backwardBtn">↓</button>
+    </div>-->
+  </div>
 
     <script>
         // 1) Setup viewer with OSM Buildings
@@ -250,11 +319,41 @@
                 console.log("🦆 Duck rotated");
             }
         });
-        // 5) Event listeners
-        document.getElementById('streetViewBtn').addEventListener('click', () => {
-            flyCameraToStreetView(13.4050, 52.5200);
-        });
 
+        function teleportElement(lon, lat, heading) {
+    const state = sceneModels[0].state;
+    state.lon = parseFloat(lon);
+    state.lat = parseFloat(lat);
+    state.headingDeg = parseFloat(heading);
+    
+    // ✅ CORRECTED: Array of positions
+    Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, 
+        [Cesium.Cartographic.fromDegrees(state.lon, state.lat)])
+        .then(([updated]) => {
+            state.terrainHeight = updated.height || 0;
+            state.finalHeight = state.terrainHeight + 1.0;
+            updateAllModels();
+            flyCameraToStreetView(state.lon, state.lat);
+            console.log(`✨ Duck teleported to ${lon}, ${lat}`);
+        })
+        .catch(err => {
+            console.warn("Terrain failed, using default height");
+            state.finalHeight = 1.8;
+            updateAllModels();
+        });
+}
+
+
+        // 5) Event listeners
+        document.getElementById('streetViewBtn').addEventListener('click', () => flyCameraToStreetView(13.4050, 52.5200));
+        document.getElementById('updateBtn').addEventListener('click', () => {
+            const lon = document.getElementById('newLon').value;
+            const lat = document.getElementById('newLat').value;
+            const heading = document.getElementById('newHeading').value;
+            teleportElement(lon, lat, heading);
+        });
+        document.getElementById('zoomInBtn').addEventListener('click', () => viewer.camera.zoomIn(5));
+        document.getElementById('zoomOutBtn').addEventListener('click', () => viewer.camera.zoomOut(5));
 
         // 6) Initialize
         (async function init() {
