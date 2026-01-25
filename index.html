@@ -1,33 +1,75 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <script src="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Cesium.js"></script>
     <link href="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
     <style>
-        html, body, #cesiumContainer {
-            width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
+        html,
+        body,
+        #cesiumContainer {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
         }
+
         #streetViewBtn {
-            position: absolute; top: 10px; left: 10px; z-index: 1000;
-            padding: 12px 20px; background: #007cba; color: white; border: none;
-            border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px;
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            padding: 12px 20px;
+            background: #007cba;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
         }
-        #streetViewBtn:hover { background: #005a87; }
+
+        #streetViewBtn:hover {
+            background: #005a87;
+        }
+
         #info {
-            position: absolute; top: 10px; right: 10px; z-index: 1000;
-            background: rgba(0,0,0,0.7); color: white; padding: 15px;
-            border-radius: 6px; font-family: monospace; font-size: 12px; max-width: 300px;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 12px;
+            max-width: 300px;
         }
+
         @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            25% { transform: translateX(-5px); }
-            75% { transform: translateX(5px); }
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            25% {
+                transform: translateX(-5px);
+            }
+
+            75% {
+                transform: translateX(5px);
+            }
         }
+
         .building-collision {
             animation: shake 0.3s ease-in-out;
         }
     </style>
 </head>
+
 <body>
     <div id="cesiumContainer"></div>
     <button id="streetViewBtn">Street View Berlin</button>
@@ -62,7 +104,7 @@
                 const buildingsTileset = await Cesium.createOsmBuildingsAsync();
                 viewer.scene.primitives.add(buildingsTileset);
                 console.log("✅ Buildings loaded");
-            } catch (e) {}
+            } catch (e) { }
         }
 
         const controller = viewer.scene.screenSpaceCameraController;
@@ -70,20 +112,28 @@
         controller.enableCollisionDetection = true; // Bounces off ground
         controller.enableLook = true;              // Street view mouse look
 
-        // 2) FIXED Street view camera (eye-level, realistic)
         async function flyCameraToStreetView(lon, lat) {
-            const carto = Cesium.Cartographic.fromDegrees(lon, lat);
-            const [updated] = await Cesium.sampleTerrainMostDetailed(
-                viewer.terrainProvider, [carto]
-            );
-            const groundHeight = updated.height || 0;
-            
-            const targetPos = Cesium.Cartesian3.fromDegrees(lon, lat, groundHeight + 1.5);
-            const cameraPos = Cesium.Cartesian3.fromDegrees(lon, lat, groundHeight + 2.0);
-            
-            viewer.camera.lookAt(targetPos, new Cesium.HeadingPitchRange(
-                0, Cesium.Math.toRadians(-15), 8
-            ));
+            try {
+                const carto = Cesium.Cartographic.fromDegrees(lon, lat);
+                const [updated] = await Cesium.sampleTerrainMostDetailed(
+                    viewer.terrainProvider, [carto]
+                );
+                const groundHeight = updated.height || 0;
+
+                const targetPos = Cesium.Cartesian3.fromDegrees(lon, lat, groundHeight + 1.5);
+                const cameraPos = Cesium.Cartesian3.fromDegrees(lon, lat, groundHeight + 2.0);
+
+                viewer.camera.lookAt(targetPos, new Cesium.HeadingPitchRange(
+                    0, Cesium.Math.toRadians(-15), 8
+                ));
+            } catch (error) {
+                // Fallback if terrain fails
+                console.log("Using flat street view");
+                viewer.camera.lookAt(
+                    Cesium.Cartesian3.fromDegrees(lon, lat, 37),  // Berlin street level
+                    new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-15), 8)
+                );
+            }
         }
 
         // 3) Scene objects - ADD YOUR 3D MODELS HERE
@@ -102,103 +152,109 @@
         let sceneModels = [];
 
         async function loadSceneObjects() {
-    for (const obj of sceneObjects) {
-        try {
-            // 1️⃣ Sample terrain height at exact coordinates
-            const carto = Cesium.Cartographic.fromDegrees(obj.lon, obj.lat);
-            const [updated] = await Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, [carto]);
-            const terrainHeight = updated.height || 0;
-            
-            // 2️⃣ Add safety offset ABOVE terrain (3m total)
-            const finalHeight = terrainHeight + 1.0;
-            
-            const pos = Cesium.Cartesian3.fromDegrees(obj.lon, obj.lat, finalHeight);
-            const hpr = new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(obj.headingDeg), 0, 0);
-            const modelMatrix = Cesium.Transforms.headingPitchRollToFixedFrame(pos, hpr);
-            
-            const model = await Cesium.Model.fromGltfAsync({
-                url: obj.url,
-                modelMatrix,
-                scale: obj.scale,
-                show: true
-            });
-            
-            viewer.scene.primitives.add(model);
-            sceneModels.push({ 
-                model, 
-                state: { 
-                    ...obj, 
-                    terrainHeight,  // Store for updates
-                    finalHeight     // Store corrected height
-                } 
-            });
-            console.log(`✅ ${obj.name}: terrain=${terrainHeight.toFixed(1)}m, placed=${finalHeight.toFixed(1)}m`);
-        } catch (error) {
-            console.error(`❌ ${obj.name}:`, error.message);
-        }
-    }
-}
+            for (const obj of sceneObjects) {
+                try {
+                    // 1️⃣ Sample terrain height at exact coordinates
+                    const carto = Cesium.Cartographic.fromDegrees(obj.lon, obj.lat);
+                    const [updated] = await Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, [carto]);
+                    const terrainHeight = updated.height || 0;
 
-function canMoveToPosition(lon, lat, objIndex) {
-    // Simple building collision check using OSM bounds
-    const lonMin = 13.4040, lonMax = 13.4070;
-    const latMin = 52.5190, latMax = 52.5220;
-    
-    // Check if new position is inside known building areas
-    const safeZone = objIndex === 0 ? 0.00005 : 0.00003; // Duck/Tower safety margin
-    
-    return lon > lonMin + safeZone && lon < lonMax - safeZone &&
-           lat > latMin + safeZone && lat < latMax - safeZone;
-}
+                    // 2️⃣ Add safety offset ABOVE terrain (3m total)
+                    const finalHeight = terrainHeight + 1.0;
+
+                    const pos = Cesium.Cartesian3.fromDegrees(obj.lon, obj.lat, finalHeight);
+                    const hpr = new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(obj.headingDeg), 0, 0);
+                    const modelMatrix = Cesium.Transforms.headingPitchRollToFixedFrame(pos, hpr);
+
+                    const model = await Cesium.Model.fromGltfAsync({
+                        url: obj.url,
+                        modelMatrix,
+                        scale: obj.scale,
+                        show: true
+                    });
+
+                    viewer.scene.primitives.add(model);
+                    sceneModels.push({
+                        model,
+                        state: {
+                            ...obj,
+                            terrainHeight,  // Store for updates
+                            finalHeight     // Store corrected height
+                        }
+                    });
+                    console.log(`✅ ${obj.name}: terrain=${terrainHeight.toFixed(1)}m, placed=${finalHeight.toFixed(1)}m`);
+                } catch (error) {
+                    console.error(`❌ ${obj.name}:`, error.message);
+                }
+            }
+        }
+
+        function canMoveToPosition(lon, lat) {
+            // TINY safe zone = will actually hit boundaries
+            const safeZone = 0.000003;  // 1 meter (~0.00001 degrees)
+            const lonMin = 13.4045, lonMax = 13.4065;
+            const latMin = 52.5195, latMax = 52.5215;
+
+            const result = lon > lonMin + safeZone && lon < lonMax - safeZone &&
+                lat > latMin + safeZone && lat < latMax - safeZone;
+
+            console.log(`Collision check: ${lon.toFixed(6)}, ${lat.toFixed(6)} = ${result}`);
+            return result;
+        }
+
         function updateAllModels() {
-    sceneModels.forEach(({ model, state }) => {
-        if (!model || !model.show) return;
-        
-        // ✅ FIXED: Use terrain-aware height
-        const useHeight = state.finalHeight || state.height || 3.0;
-        const pos = Cesium.Cartesian3.fromDegrees(state.lon, state.lat, useHeight);
-        const hpr = new Cesium.HeadingPitchRoll(
-            Cesium.Math.toRadians(state.headingDeg), 0, 0
-        );
-        model.modelMatrix = Cesium.Transforms.headingPitchRollToFixedFrame(pos, hpr);
-    });
-}
+            sceneModels.forEach(({ model, state }) => {
+                if (!model || !model.show) return;
+
+                // ✅ FIXED: Use terrain-aware height
+                const useHeight = state.finalHeight || state.height || 3.0;
+                const pos = Cesium.Cartesian3.fromDegrees(state.lon, state.lat, useHeight);
+                const hpr = new Cesium.HeadingPitchRoll(
+                    Cesium.Math.toRadians(state.headingDeg), 0, 0
+                );
+                model.modelMatrix = Cesium.Transforms.headingPitchRollToFixedFrame(pos, hpr);
+            });
+        }
 
 
         // 4) Enhanced keyboard controls
         window.addEventListener("keydown", (e) => {
             if (sceneModels.length === 0) return;
 
+            const state = sceneModels[0].state;  // Duck only
             const moveStepMeters = 1.0;
-            const rotStepDeg = 1.0;
-            const state = sceneModels[0].state;
+            const rotStepDeg = 2.0;
             const headingRad = Cesium.Math.toRadians(state.headingDeg);
 
+            // Arrow Up/Down = Forward/Backward
             if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-            const newLon = state.lon + (e.key === 'ArrowUp' ? 1 : -1) * 
-                          (Math.sin(headingRad) * moveStepMeters) / 111320.0;
-            const newLat = state.lat + (e.key === 'ArrowUp' ? 1 : -1) * 
-                          (Math.cos(headingRad) * moveStepMeters) / 110540.0;
-            
-            if (canMoveToPosition(newLon, newLat, 1)) {
-                state.lon = newLon;
-                state.lat = newLat;
-                updateAllModels();
-            }
-        } else {
-            // Rotation is always safe
-            state.headingDeg += (e.key === 'ArrowRight' ? rotStepDeg : -rotStepDeg);
-            updateAllModels();
-        }
-        });
+                const direction = e.key === 'ArrowUp' ? 1 : -1;
+                const newLon = state.lon + direction * (Math.sin(headingRad) * moveStepMeters) / 111320.0;
+                const newLat = state.lat + direction * (Math.cos(headingRad) * moveStepMeters) / 110540.0;
 
+                if (canMoveToPosition(newLon, newLat)) {  // objIndex=0 for duck
+                    state.lon = newLon;
+                    state.lat = newLat;
+                    updateAllModels();
+                    console.log("✅ Duck moved");
+                } else {
+                    console.log("🚫 Duck blocked!");
+                    document.body.classList.add('building-collision');
+                    setTimeout(() => document.body.classList.remove('building-collision'), 300);
+                }
+            }
+            // Arrow Left/Right = Rotate
+            else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                state.headingDeg += (e.key === 'ArrowRight' ? rotStepDeg : -rotStepDeg);
+                updateAllModels();
+                console.log("🦆 Duck rotated");
+            }
+        });
         // 5) Event listeners
         document.getElementById('streetViewBtn').addEventListener('click', () => {
             flyCameraToStreetView(13.4050, 52.5200);
         });
 
-        document.body.classList.add('building-collision');
-setTimeout(() => document.body.classList.remove('building-collision'), 300);
 
         // 6) Initialize
         (async function init() {
@@ -206,6 +262,8 @@ setTimeout(() => document.body.classList.remove('building-collision'), 300);
             await loadSceneObjects();     // Your custom 3D objects
             await flyCameraToStreetView(13.4050, 52.5200);  // Street view
         })();
+
     </script>
 </body>
+
 </html>
