@@ -78,12 +78,13 @@
         .building-collision {
             animation: shake 0.3s ease-in-out;
         }
+
         #coordsPanel {
             position: absolute;
             top: 70px;
             left: 10px;
             z-index: 1000;
-            background: rgba(0,0,0,0.85);
+            background: rgba(0, 0, 0, 0.85);
             color: white;
             padding: 15px;
             border-radius: 8px;
@@ -91,33 +92,45 @@
             font-family: monospace;
             font-size: 13px;
         }
-        .coord-row { margin: 8px 0; }
-        .coord-label { color: #4CAF50; font-weight: bold; min-width: 70px; display: inline-block; }
-        input[type="number"] { 
-            width: 90px; padding: 4px; 
-            background: #333; color: white; 
-            border: 1px solid #555; border-radius: 3px;
+
+        .coord-row {
+            margin: 8px 0;
         }
 
+        .coord-label {
+            color: #4CAF50;
+            font-weight: bold;
+            min-width: 70px;
+            display: inline-block;
+        }
+
+        input[type="number"] {
+            width: 90px;
+            padding: 4px;
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 3px;
+        }
     </style>
 </head>
 
 <body>
     <div id="cesiumContainer"></div>
     <button id="streetViewBtn">Street View Berlin</button>
-    <div id="info" >
+    <div id="info">
         <strong>Controls:</strong><br>
         Arrows = Duck movement/rotation<br>
         Mouse = Look around
     </div>
 
     <div id="coordsPanel">
-        <div class="coord-row"><span class="coord-label">📍 Lon:</span> <span id="currentLon">13.4050</span></div>
-        <div class="coord-row"><span class="coord-label">📍 Lat:</span> <span id="currentLat">52.5200</span></div>
-        <div class="coord-row"><span class="coord-label">🎯 Hdg:</span> <span id="currentHeading">0°</span></div>
-        
+        <div class="coord-row"><span class="coord-label">Lon:</span> <span id="currentLon">13.4050</span></div>
+        <div class="coord-row"><span class="coord-label">Lat:</span> <span id="currentLat">52.5200</span></div>
+        <div class="coord-row"><span class="coord-label">Dir:</span> <span id="currentHeading">0°</span></div>
+
         <hr style="margin: 12px 0; border-color: #555;">
-        
+
         <div class="coord-row">
             <span class="coord-label">New Lon:</span>
             <input type="number" id="newLon" step="any" value="13.4050">
@@ -130,26 +143,26 @@
             <span class="coord-label">Heading:</span>
             <input type="number" id="newHeading" value="0">
         </div>
-        <button id="updateBtn">✨ Teleport Duck</button>
+        <button id="updateBtn">Teleport Element</button>
     </div>
 
-  <!-- On-screen controls -->
-  <div id="uiControls">
-    <div class="control-row">
-      <button class="ctrl-btn" id="zoomInBtn">Zoom +</button>
-      <button class="ctrl-btn" id="zoomOutBtn">Zoom -</button>
+    <!-- On-screen controls -->
+    <div id="uiControls">
+        <div class="control-row">
+            <button class="ctrl-btn" id="zoomInBtn">Zoom +</button>
+            <button class="ctrl-btn" id="zoomOutBtn">Zoom -</button>
+            <button class="ctrl-btn" id="rotateLeftBtn">Rotate L</button>
+            <button class="ctrl-btn" id="rotateRightBtn">Rotate R</button>
+            <button class="ctrl-btn" id="moveForwardBtn">Forward</button>
+            <button class="ctrl-btn" id="moveBackwardBtn">Backwards</button>
+
+    <button class="ctrl-btn" id="selectFileBtn">Select 3D Model</button>
+    <input type="file" id="fileInput" accept=".glb,.gltf" style="display:none;">
+        </div>
     </div>
-    <!--<div class="control-row">
-      <button class="ctrl-btn" id="turnLeftBtn">↺</button>
-      <button class="ctrl-btn" id="forwardBtn">↑</button>
-      <button class="ctrl-btn" id="turnRightBtn">↻</button>
-    </div>
-    <div class="control-row">
-      <button class="ctrl-btn" id="backwardBtn">↓</button>
-    </div>-->
-  </div>
 
     <script>
+        currentElement = -1; 
         // 1) Setup viewer with OSM Buildings
         Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIwYWE5ZDIyMy0yZjkyLTRmOTAtYmViNC1lY2E4ZWExMTk5OGEiLCJpZCI6MzgyMjMxLCJpYXQiOjE3NjkwOTg2OTN9.oMHO1hKG93R0omwJMmtKxsNfr8HJHI6tWlbz3hcuXfI";
 
@@ -167,13 +180,15 @@
             vrButton: false
         });
 
-        // Add Cesium OSM Buildings (global 3D buildings from OpenStreetMap)
+        // Add Cesium OpenStreetMaps Buildings
         async function addOSMBuildings() {
             try {
                 const buildingsTileset = await Cesium.createOsmBuildingsAsync();
                 viewer.scene.primitives.add(buildingsTileset);
-                console.log("✅ Buildings loaded");
-            } catch (e) { }
+                console.log("Buildings loaded");
+            } catch (e) { 
+                console.log("Probleme beim Laden der Gebäude");
+            }
         }
 
         const controller = viewer.scene.screenSpaceCameraController;
@@ -195,6 +210,7 @@
                 viewer.camera.lookAt(targetPos, new Cesium.HeadingPitchRange(
                     0, Cesium.Math.toRadians(-15), 8
                 ));
+                viewer.camera.zoomOut(100)
             } catch (error) {
                 // Fallback if terrain fails
                 console.log("Using flat street view");
@@ -205,7 +221,6 @@
             }
         }
 
-        // 3) Scene objects - ADD YOUR 3D MODELS HERE
         const sceneObjects = [
             {
                 name: 'Duck Bank',
@@ -223,12 +238,12 @@
         async function loadSceneObjects() {
             for (const obj of sceneObjects) {
                 try {
-                    // 1️⃣ Sample terrain height at exact coordinates
+                    // Sample terrain height at exact coordinates
                     const carto = Cesium.Cartographic.fromDegrees(obj.lon, obj.lat);
                     const [updated] = await Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, [carto]);
                     const terrainHeight = updated.height || 0;
 
-                    // 2️⃣ Add safety offset ABOVE terrain (3m total)
+                    // Add safety offset ABOVE terrain (3m total)
                     const finalHeight = terrainHeight + 1.0;
 
                     const pos = Cesium.Cartesian3.fromDegrees(obj.lon, obj.lat, finalHeight);
@@ -251,13 +266,14 @@
                             finalHeight     // Store corrected height
                         }
                     });
-                    console.log(`✅ ${obj.name}: terrain=${terrainHeight.toFixed(1)}m, placed=${finalHeight.toFixed(1)}m`);
+                    console.log(`${obj.name}: terrain=${terrainHeight.toFixed(1)}m, placed=${finalHeight.toFixed(1)}m`);
                 } catch (error) {
-                    console.error(`❌ ${obj.name}:`, error.message);
+                    console.error(`${obj.name}:`, error.message);
                 }
             }
         }
 
+        //TODO
         function canMoveToPosition(lon, lat) {
             // TINY safe zone = will actually hit boundaries
             const safeZone = 0.000003;  // 1 meter (~0.00001 degrees)
@@ -271,11 +287,21 @@
             return result;
         }
 
+        function updateCoordDisplay() {
+            if (!sceneModels[0]) return;
+            const state = sceneModels[0].state;
+            document.getElementById('currentLon').textContent = state.lon.toFixed(6);
+            document.getElementById('currentLat').textContent = state.lat.toFixed(6);
+            document.getElementById('currentHeading').textContent = Math.round(state.headingDeg) + '°';
+            document.getElementById('newLon').value = state.lon.toFixed(6);
+            document.getElementById('newLat').value = state.lat.toFixed(6);
+            document.getElementById('newHeading').value = Math.round(state.headingDeg);
+        }
+
         function updateAllModels() {
             sceneModels.forEach(({ model, state }) => {
                 if (!model || !model.show) return;
 
-                // ✅ FIXED: Use terrain-aware height
                 const useHeight = state.finalHeight || state.height || 3.0;
                 const pos = Cesium.Cartesian3.fromDegrees(state.lon, state.lat, useHeight);
                 const hpr = new Cesium.HeadingPitchRoll(
@@ -283,67 +309,80 @@
                 );
                 model.modelMatrix = Cesium.Transforms.headingPitchRollToFixedFrame(pos, hpr);
             });
+            updateCoordDisplay();
         }
 
-
-        // 4) Enhanced keyboard controls
-        window.addEventListener("keydown", (e) => {
+        //forwardOrBack: 1 = forward, -1 = back
+        function moveElementForNBack(elemIdx, forwardOrBack){
             if (sceneModels.length === 0) return;
 
-            const state = sceneModels[0].state;  // Duck only
+            const state = sceneModels[elemIdx].state;  // Select object
             const moveStepMeters = 1.0;
+            const headingRad = Cesium.Math.toRadians(state.headingDeg);
+
+            const direction = forwardOrBack;
+            const newLon = state.lon + direction * (Math.sin(headingRad) * moveStepMeters) / 111320.0;
+            const newLat = state.lat + direction * (Math.cos(headingRad) * moveStepMeters) / 110540.0;
+
+            if (canMoveToPosition(newLon, newLat)) {  // objIndex=0 for duck
+                state.lon = newLon;
+                state.lat = newLat;
+                updateAllModels();
+                console.log("Element moved");
+            } else {
+                console.log("Element blocked!");
+                document.body.classList.add('building-collision');
+                setTimeout(() => document.body.classList.remove('building-collision'), 300);
+            }
+        }
+
+        //leftOrRight: 1 = Right, -1 = Left
+        function moveElementRotate(elemIdx, leftOrRight){
+            if (sceneModels.length === 0) return;
+
+            const state = sceneModels[elemIdx].state;  // Select object
             const rotStepDeg = 2.0;
             const headingRad = Cesium.Math.toRadians(state.headingDeg);
 
+            const direction = leftOrRight;
+            state.headingDeg += (direction*rotStepDeg);
+            updateAllModels();
+            console.log("Element rotated");
+        }
+
+        function teleportElement(lon, lat, heading) {
+            const state = sceneModels[0].state;
+            state.lon = parseFloat(lon);
+            state.lat = parseFloat(lat);
+            state.headingDeg = parseFloat(heading);
+
+            // CORRECTED: Array of positions
+            Cesium.sampleTerrainMostDetailed(viewer.terrainProvider,
+                [Cesium.Cartographic.fromDegrees(state.lon, state.lat)])
+                .then(([updated]) => {
+                    state.terrainHeight = updated.height || 0;
+                    state.finalHeight = state.terrainHeight + 1.0;
+                    updateAllModels();
+                    flyCameraToStreetView(state.lon, state.lat);
+                    console.log(`Duck teleported to ${lon}, ${lat}`);
+                })
+                .catch(err => {
+                    console.warn("Terrain failed, using default height");
+                    state.finalHeight = 1.8;
+                    updateAllModels();
+                });
+        }
+
+        window.addEventListener("keydown", (e) => {
             // Arrow Up/Down = Forward/Backward
             if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                const direction = e.key === 'ArrowUp' ? 1 : -1;
-                const newLon = state.lon + direction * (Math.sin(headingRad) * moveStepMeters) / 111320.0;
-                const newLat = state.lat + direction * (Math.cos(headingRad) * moveStepMeters) / 110540.0;
-
-                if (canMoveToPosition(newLon, newLat)) {  // objIndex=0 for duck
-                    state.lon = newLon;
-                    state.lat = newLat;
-                    updateAllModels();
-                    console.log("✅ Duck moved");
-                } else {
-                    console.log("🚫 Duck blocked!");
-                    document.body.classList.add('building-collision');
-                    setTimeout(() => document.body.classList.remove('building-collision'), 300);
-                }
+                moveElementForNBack(0, e.key === 'ArrowUp' ? 1 : -1);
             }
             // Arrow Left/Right = Rotate
             else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-                state.headingDeg += (e.key === 'ArrowRight' ? rotStepDeg : -rotStepDeg);
-                updateAllModels();
-                console.log("🦆 Duck rotated");
+                moveElementRotate(0, e.key === 'ArrowRight' ? 1 : -1);
             }
         });
-
-        function teleportElement(lon, lat, heading) {
-    const state = sceneModels[0].state;
-    state.lon = parseFloat(lon);
-    state.lat = parseFloat(lat);
-    state.headingDeg = parseFloat(heading);
-    
-    // ✅ CORRECTED: Array of positions
-    Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, 
-        [Cesium.Cartographic.fromDegrees(state.lon, state.lat)])
-        .then(([updated]) => {
-            state.terrainHeight = updated.height || 0;
-            state.finalHeight = state.terrainHeight + 1.0;
-            updateAllModels();
-            flyCameraToStreetView(state.lon, state.lat);
-            console.log(`✨ Duck teleported to ${lon}, ${lat}`);
-        })
-        .catch(err => {
-            console.warn("Terrain failed, using default height");
-            state.finalHeight = 1.8;
-            updateAllModels();
-        });
-}
-
-
         // 5) Event listeners
         document.getElementById('streetViewBtn').addEventListener('click', () => flyCameraToStreetView(13.4050, 52.5200));
         document.getElementById('updateBtn').addEventListener('click', () => {
@@ -352,8 +391,63 @@
             const heading = document.getElementById('newHeading').value;
             teleportElement(lon, lat, heading);
         });
-        document.getElementById('zoomInBtn').addEventListener('click', () => viewer.camera.zoomIn(5));
-        document.getElementById('zoomOutBtn').addEventListener('click', () => viewer.camera.zoomOut(5));
+        document.getElementById('zoomInBtn').addEventListener('click', () => viewer.camera.zoomIn(50));
+        document.getElementById('zoomOutBtn').addEventListener('click', () => viewer.camera.zoomOut(50));
+        document.getElementById('rotateLeftBtn').addEventListener('click', () => moveElementRotate(0, -1));
+        document.getElementById('rotateRightBtn').addEventListener('click', () => moveElementRotate(0, 1));
+        document.getElementById('moveForwardBtn').addEventListener('click', () => moveElementForNBack(0, 1));
+        document.getElementById('moveBackwardBtn').addEventListener('click', () => moveElementForNBack(0, -1));
+
+        //Selection
+        const selectBtn = document.getElementById('selectFileBtn');
+        const fileInput = document.getElementById('fileInput');
+
+        selectBtn.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', async (event) => {
+        const files = Array.from(event.target.files);
+        for (const file of files) {
+            console.log(`Selected: ${file.name} (${file.size} bytes)`);
+
+            const url = URL.createObjectURL(file);
+            console.log(url);
+
+            try {
+            const model = await Cesium.Model.fromGltfAsync({
+                url: url,
+                scale: 10.0,
+                show: true,
+                enableModelExperimental: true
+            });
+
+            // Position model near some lon/lat (Berlin center in your app)
+            const lon = 13.4050;
+            const lat = 52.5200;
+            const height = 1.8; // meters above ground
+
+            const position = Cesium.Cartesian3.fromDegrees(lon, lat, height);
+            const headingDeg = 0;  // force no rotation
+            const hpr = new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(headingDeg), 0, 0);
+            const modelMatrix = Cesium.Transforms.headingPitchRollToFixedFrame(position, hpr);
+            model.modelMatrix = modelMatrix;
+
+            viewer.scene.primitives.add(model);
+            sceneObjects.push(model);
+            console.log('Model loaded and added!');
+            console.log('Models ' + sceneObjects.length);
+
+            // Fly camera to model so you can see it
+            viewer.camera.flyTo({
+                destination: position,
+                duration: 1.5
+            });
+            } catch (e) {
+            console.error('Failed to load model:', e);
+            }
+        }
+
+        fileInput.value = '';
+        });
+
 
         // 6) Initialize
         (async function init() {
