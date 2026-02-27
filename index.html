@@ -162,7 +162,7 @@
     </div>
 
     <script>
-        currentElement = -1; 
+        let currentElement = -1; 
         // 1) Setup viewer with OSM Buildings
         Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIwYWE5ZDIyMy0yZjkyLTRmOTAtYmViNC1lY2E4ZWExMTk5OGEiLCJpZCI6MzgyMjMxLCJpYXQiOjE3NjkwOTg2OTN9.oMHO1hKG93R0omwJMmtKxsNfr8HJHI6tWlbz3hcuXfI";
 
@@ -229,7 +229,8 @@
                 lat: 52.5200,
                 height: 1.8,  // Street level
                 scale: 10.0,
-                headingDeg: 0
+                headingDeg: 0,
+                id: 0
             }
         ];
 
@@ -254,7 +255,8 @@
                         url: obj.url,
                         modelMatrix,
                         scale: obj.scale,
-                        show: true
+                        show: true,
+                        id: sceneModels.length   
                     });
 
                     viewer.scene.primitives.add(model);
@@ -282,14 +284,12 @@
 
             const result = lon > lonMin + safeZone && lon < lonMax - safeZone &&
                 lat > latMin + safeZone && lat < latMax - safeZone;
-
-            console.log(`Collision check: ${lon.toFixed(6)}, ${lat.toFixed(6)} = ${result}`);
             return result;
         }
 
         function updateCoordDisplay() {
-            if (!sceneModels[0]) return;
-            const state = sceneModels[0].state;
+            if (!sceneModels[currentElement]) return;
+            const state = sceneModels[currentElement].state;
             document.getElementById('currentLon').textContent = state.lon.toFixed(6);
             document.getElementById('currentLat').textContent = state.lat.toFixed(6);
             document.getElementById('currentHeading').textContent = Math.round(state.headingDeg) + '°';
@@ -328,7 +328,6 @@
                 state.lon = newLon;
                 state.lat = newLat;
                 updateAllModels();
-                console.log("Element moved");
             } else {
                 console.log("Element blocked!");
                 document.body.classList.add('building-collision');
@@ -347,16 +346,14 @@
             const direction = leftOrRight;
             state.headingDeg += (direction*rotStepDeg);
             updateAllModels();
-            console.log("Element rotated");
         }
 
         function teleportElement(lon, lat, heading) {
-            const state = sceneModels[0].state;
+            const state = sceneModels[currentElement].state;
             state.lon = parseFloat(lon);
             state.lat = parseFloat(lat);
             state.headingDeg = parseFloat(heading);
 
-            // CORRECTED: Array of positions
             Cesium.sampleTerrainMostDetailed(viewer.terrainProvider,
                 [Cesium.Cartographic.fromDegrees(state.lon, state.lat)])
                 .then(([updated]) => {
@@ -364,7 +361,7 @@
                     state.finalHeight = state.terrainHeight + 1.0;
                     updateAllModels();
                     flyCameraToStreetView(state.lon, state.lat);
-                    console.log(`Duck teleported to ${lon}, ${lat}`);
+                    console.log(`Element teleported to ${lon}, ${lat}`);
                 })
                 .catch(err => {
                     console.warn("Terrain failed, using default height");
@@ -373,14 +370,26 @@
                 });
         }
 
+        const handler = new Cesium.ScreenSpaceEventHandler(viewer.canvas);
+
+        handler.setInputAction(function (movement) {
+        const picked = viewer.scene.pick(movement.position);
+        if (!Cesium.defined(picked)) return;
+        const idx = picked.id;
+        if (typeof idx === 'number' && sceneModels[idx]) {
+            currentElement = idx;
+            console.log('currentElement =', currentElement, sceneModels[idx].state.name);
+        }
+        }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
         window.addEventListener("keydown", (e) => {
             // Arrow Up/Down = Forward/Backward
             if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                moveElementForNBack(0, e.key === 'ArrowUp' ? 1 : -1);
+                moveElementForNBack(currentElement, e.key === 'ArrowUp' ? 1 : -1);
             }
             // Arrow Left/Right = Rotate
             else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-                moveElementRotate(0, e.key === 'ArrowRight' ? 1 : -1);
+                moveElementRotate(currentElement, e.key === 'ArrowRight' ? 1 : -1);
             }
         });
         // 5) Event listeners
@@ -393,10 +402,10 @@
         });
         document.getElementById('zoomInBtn').addEventListener('click', () => viewer.camera.zoomIn(50));
         document.getElementById('zoomOutBtn').addEventListener('click', () => viewer.camera.zoomOut(50));
-        document.getElementById('rotateLeftBtn').addEventListener('click', () => moveElementRotate(0, -1));
-        document.getElementById('rotateRightBtn').addEventListener('click', () => moveElementRotate(0, 1));
-        document.getElementById('moveForwardBtn').addEventListener('click', () => moveElementForNBack(0, 1));
-        document.getElementById('moveBackwardBtn').addEventListener('click', () => moveElementForNBack(0, -1));
+        document.getElementById('rotateLeftBtn').addEventListener('click', () => moveElementRotate(currentElement, -1));
+        document.getElementById('rotateRightBtn').addEventListener('click', () => moveElementRotate(currentElement, 1));
+        document.getElementById('moveForwardBtn').addEventListener('click', () => moveElementForNBack(currentElement, 1));
+        document.getElementById('moveBackwardBtn').addEventListener('click', () => moveElementForNBack(currentElement, -1));
 
         //Selection
         const selectBtn = document.getElementById('selectFileBtn');
@@ -416,6 +425,7 @@
                 url: url,
                 scale: 10.0,
                 show: true,
+                id: sceneModels.length,   
                 enableModelExperimental: true
             });
 
@@ -423,6 +433,13 @@
             const lon = 13.4050;
             const lat = 52.5200;
             const height = 1.8; // meters above ground
+            // Sample terrain height at exact coordinates
+            const carto = Cesium.Cartographic.fromDegrees(lon, lat);
+            const [updated] = await Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, [carto]);
+            const terrainHeight = updated.height || 0;
+
+            // Add safety offset ABOVE terrain (3m total)
+            const finalHeight = terrainHeight + 1.0;
 
             const position = Cesium.Cartesian3.fromDegrees(lon, lat, height);
             const headingDeg = 0;  // force no rotation
@@ -431,15 +448,23 @@
             model.modelMatrix = modelMatrix;
 
             viewer.scene.primitives.add(model);
-            sceneObjects.push(model);
+            sceneModels.push({
+                model,
+                state: {
+                    name: file.name,
+                    lon,
+                    lat,
+                    headingDeg,
+                    terrainHeight,
+                    finalHeight,
+                    height: finalHeight,
+                    scale: 10.0
+                }
+            });
             console.log('Model loaded and added!');
-            console.log('Models ' + sceneObjects.length);
 
             // Fly camera to model so you can see it
-            viewer.camera.flyTo({
-                destination: position,
-                duration: 1.5
-            });
+            flyCameraToStreetView(lon, lat);
             } catch (e) {
             console.error('Failed to load model:', e);
             }
