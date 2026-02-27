@@ -120,8 +120,9 @@
     <button id="streetViewBtn">Street View Berlin</button>
     <div id="info">
         <strong>Controls:</strong><br>
-        Arrows = Duck movement/rotation<br>
-        Mouse = Look around
+        Arrows = Movement/rotation<br>
+        Mouse = Look around<br>
+        Click on Element = Selection<br>
     </div>
 
     <div id="coordsPanel">
@@ -370,18 +371,6 @@
                 });
         }
 
-        const handler = new Cesium.ScreenSpaceEventHandler(viewer.canvas);
-
-        handler.setInputAction(function (movement) {
-        const picked = viewer.scene.pick(movement.position);
-        if (!Cesium.defined(picked)) return;
-        const idx = picked.id;
-        if (typeof idx === 'number' && sceneModels[idx]) {
-            currentElement = idx;
-            console.log('currentElement =', currentElement, sceneModels[idx].state.name);
-        }
-        }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
-
         window.addEventListener("keydown", (e) => {
             // Arrow Up/Down = Forward/Backward
             if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
@@ -472,13 +461,108 @@
 
         fileInput.value = '';
         });
+        
+        const handler = new Cesium.ScreenSpaceEventHandler(viewer.canvas);
 
+        handler.setInputAction(function (movement) {
+            const picked = viewer.scene.pick(movement.position);
+            if (!Cesium.defined(picked)) return;
+            const idx = picked.id;
+            if (typeof idx === 'number' && sceneModels[idx]) {
+                currentElement = idx;
+                console.log('currentElement =', currentElement, sceneModels[idx].state.name);
+            }
+        }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+        //--------------------------------------------------------
+        
+        // Put near your other globals
+        let isDragging = false;
+        let dragIndex = -1;
+        let dragStartLonLat = null;
+
+        // Helper: screen position → lon/lat on globe/terrain
+        function screenToLonLat(windowPosition) {
+            const scene = viewer.scene;
+
+            // Prefer pickPosition (terrain/buildings), fallback to ellipsoid
+            let cartesian = undefined;
+            if (scene.pickPositionSupported) {
+                cartesian = scene.pickPosition(windowPosition);
+            }
+            if (!cartesian) {
+                cartesian = viewer.camera.pickEllipsoid(windowPosition, scene.globe.ellipsoid);
+            }
+            if (!cartesian) return null;
+
+            const carto = Cesium.Cartographic.fromCartesian(cartesian);
+            return {
+                lon: Cesium.Math.toDegrees(carto.longitude),
+                lat: Cesium.Math.toDegrees(carto.latitude)
+            };
+        }
+
+        // Mouse down: select element and start dragging
+        const dragHandler = new Cesium.ScreenSpaceEventHandler(viewer.canvas);
+
+        dragHandler.setInputAction(function (click) {
+        const picked = viewer.scene.pick(click.position);
+        if (!Cesium.defined(picked)) return;
+        const idx = picked.id;
+        if (typeof idx === 'number' && sceneModels[idx]) {
+            currentElement = idx;
+            console.log("ELement selected for movement")
+        }else{
+            console.log("Element not found");
+            return;
+        }
+
+        const lonlat = screenToLonLat(click.position);
+
+        if (!lonlat) return;
+
+        isDragging = true;
+        dragIndex = idx;
+        currentElement = idx;                 // also update your currentElement
+        dragStartLonLat = { ...sceneModels[idx].state };  // copy current state lon/lat
+
+        viewer.scene.screenSpaceCameraController.enableRotate = false;
+        viewer.scene.screenSpaceCameraController.enableTranslate = false;
+        viewer.scene.screenSpaceCameraController.enableZoom = false;
+
+        }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
+// Mouse move: object follows mouse EXACTLY
+dragHandler.setInputAction(function (movement) {
+  if (!isDragging || dragIndex < 0 || !sceneModels[dragIndex]) return;
+
+  // Get lon/lat DIRECTLY under mouse cursor
+  const mouseLonLat = screenToLonLat(movement.endPosition);
+  if (!mouseLonLat) return;
+
+  // Set object position to EXACTLY where the mouse is
+  const state = sceneModels[dragIndex].state;
+  state.lon = mouseLonLat.lon;
+  state.lat = mouseLonLat.lat;
+
+  updateAllModels();
+}, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+        // Mouse up: stop dragging
+        function endDrag() {
+            if (!isDragging) return;
+            isDragging = false;
+            dragIndex = -1;
+            viewer.scene.screenSpaceCameraController.enableRotate = true;
+            viewer.scene.screenSpaceCameraController.enableTranslate = true;
+            viewer.scene.screenSpaceCameraController.enableZoom = true;
+        }
+
+        dragHandler.setInputAction(endDrag, Cesium.ScreenSpaceEventType.LEFT_UP);
 
         // 6) Initialize
         (async function init() {
             await addOSMBuildings();      // Real Berlin buildings
             await loadSceneObjects();     // Your custom 3D objects
-            await flyCameraToStreetView(13.4050, 52.5200);  // Street view
+            //await flyCameraToStreetView(13.4050, 52.5200);  // Street view
         })();
 
     </script>
