@@ -157,13 +157,13 @@
             <button class="ctrl-btn" id="moveForwardBtn">Forward</button>
             <button class="ctrl-btn" id="moveBackwardBtn">Backwards</button>
 
-    <button class="ctrl-btn" id="selectFileBtn">Select 3D Model</button>
-    <input type="file" id="fileInput" accept=".glb,.gltf" style="display:none;">
+            <button class="ctrl-btn" id="selectFileBtn">Select 3D Model</button>
+            <input type="file" id="fileInput" accept=".glb,.gltf" style="display:none;">
         </div>
     </div>
 
     <script>
-        let currentElement = -1; 
+        let currentElement = -1;
         // 1) Setup viewer with OSM Buildings
         Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIwYWE5ZDIyMy0yZjkyLTRmOTAtYmViNC1lY2E4ZWExMTk5OGEiLCJpZCI6MzgyMjMxLCJpYXQiOjE3NjkwOTg2OTN9.oMHO1hKG93R0omwJMmtKxsNfr8HJHI6tWlbz3hcuXfI";
 
@@ -181,13 +181,16 @@
             vrButton: false
         });
 
+        let buildingsTileset = null;
         // Add Cesium OpenStreetMaps Buildings
         async function addOSMBuildings() {
             try {
-                const buildingsTileset = await Cesium.createOsmBuildingsAsync();
+                buildingsTileset = await Cesium.createOsmBuildingsAsync();
+                console.log("BUILD");
+                console.log(!(buildingsTileset == null));
                 viewer.scene.primitives.add(buildingsTileset);
                 console.log("Buildings loaded");
-            } catch (e) { 
+            } catch (e) {
                 console.log("Probleme beim Laden der Gebäude");
             }
         }
@@ -257,7 +260,7 @@
                         modelMatrix,
                         scale: obj.scale,
                         show: true,
-                        id: sceneModels.length   
+                        id: sceneModels.length
                     });
 
                     viewer.scene.primitives.add(model);
@@ -276,17 +279,113 @@
             }
         }
 
-        //TODO
-        function canMoveToPosition(lon, lat) {
-            // TINY safe zone = will actually hit boundaries
-            const safeZone = 0.000003;  // 1 meter (~0.00001 degrees)
-            const lonMin = 13.4045, lonMax = 13.4065;
-            const latMin = 52.5195, latMax = 52.5215;
+        function isOnBuilding(lon, lat) {
+            const scene = viewer.scene;
+            const origin = Cesium.Cartesian3.fromDegrees(lon, lat, 500.0);
+            const ground = Cesium.Cartesian3.fromDegrees(lon, lat, 0.0);
+            const dirVec = Cesium.Cartesian3.subtract(ground, origin, new Cesium.Cartesian3());
+            const direction = Cesium.Cartesian3.normalize(dirVec, new Cesium.Cartesian3());
+            const ray = new Cesium.Ray(origin, direction);
+            const result = scene.pickFromRay(ray, [buildingsTileset]);
+            console.log("pickFromRay result", result);
+            if (!result) return false;
 
-            const result = lon > lonMin + safeZone && lon < lonMax - safeZone &&
-                lat > latMin + safeZone && lat < latMax - safeZone;
-            return result;
+            // ✅ Check primitive property (standard for 3D Tiles)
+            const primitive = result.object.primitive;          
+            const isBuildingHit = primitive === buildingsTileset;
+            
+            console.log("primitive === buildingsTileset?", isBuildingHit, primitive);
+            return isBuildingHit;
         }
+
+        // returns true if the segment old -> next intersects any OSM building
+        function hitsBuilding(newLon, newLat, scene, buildingsTileset) {
+           // Cartesian position slightly above the ground at the target lon/lat
+            const cart3 = Cesium.Cartesian3.fromDegrees(newLon, newLat, 2.0);
+
+            // Ray straight down
+            const down = Cesium.Cartesian3.negate(
+                Cesium.Cartesian3.UNIT_Z,
+                new Cesium.Cartesian3()
+            );
+            const ray = new Cesium.Ray(cart3, down);
+
+            // Pick only against the OSM buildings tileset
+            const result = scene.pickFromRay(ray, [buildingsTileset]);
+            if (!result) return false;
+
+            // If the picked object belongs to the buildings tileset, we are above a building
+            return result.object?.tileset === buildingsTileset;
+        }
+
+        function canMoveToPosition(lon, lat) {
+            // no buildingsTileset yet = allow movement
+            console.log("hier");
+            if ((buildingsTileset == null)) {
+                console.log("no buildingsTileset yet");
+                return fr;
+            }
+            console.log("move2postion");
+            const collision = isOnBuilding(lon, lat);
+            //const collision = hitsBuilding(lon, lat,viewer.scene,buildingsTileset);
+
+            return !collision;
+        }
+
+        // after a successful move, update currentLon/currentLat
+        function tryMoveTo(lon, lat) {
+            console.log("try2Move");
+            const tmp = hasBuildingAt(lon, lat);
+            if (tmp) {
+                return true;
+                // update entity/camera here
+            } else {
+                console.log("blocked: would move into a building");
+                return false;
+            }
+        }
+
+async function hasBuildingAt(lon, lat) {
+    // Get terrain height (ground level)
+    const carto = Cesium.Cartographic.fromDegrees(lon, lat);
+    const [terrainPos] = await Cesium.sampleTerrainMostDetailed(
+        viewer.terrainProvider, 
+        [carto]
+    );
+    const terrainHeight = terrainPos.height || 0;
+    
+    // Get scene height (includes buildings)
+    const sceneHeight = viewer.scene.sampleHeightMostDetailed([carto])[0] || 0;
+     // If we're excluding a specific model, check if it interfered
+    if (currentElement > -1) {
+        // Temporarily hide the model to get clean height
+        const model = sceneModels.find(m => m.model.customId === currentElement)?.model;
+        if (model) {
+            const wasVisible = model.show;
+            model.show = false;
+            
+            // Force scene update
+            viewer.scene.requestRender();
+            await new Promise(r => setTimeout(r, 10));
+            
+            // Sample height without the model
+            sceneHeight = viewer.scene.sampleHeightMostDetailed([carto])[0] || 0;
+            
+            // Restore model visibility
+            model.show = wasVisible;
+            viewer.scene.requestRender();
+        }
+    }
+    
+    // Building exists if scene height is significantly higher than terrain
+    const heightDiff = sceneHeight - terrainHeight;
+    const hasBuilding = heightDiff > 3.0; // 3m threshold
+    
+    console.log(`lon:${lon.toFixed(6)} lat:${lat.toFixed(6)} | terrain:${terrainHeight.toFixed(1)}m | scene:${sceneHeight.toFixed(1)}m | building:${hasBuilding}`);
+    
+    return hasBuilding;
+}
+
 
         function updateCoordDisplay() {
             if (!sceneModels[currentElement]) return;
@@ -314,7 +413,7 @@
         }
 
         //forwardOrBack: 1 = forward, -1 = back
-        function moveElementForNBack(elemIdx, forwardOrBack){
+        function moveElementForNBack(elemIdx, forwardOrBack) {
             if (sceneModels.length === 0) return;
 
             const state = sceneModels[elemIdx].state;  // Select object
@@ -325,7 +424,7 @@
             const newLon = state.lon + direction * (Math.sin(headingRad) * moveStepMeters) / 111320.0;
             const newLat = state.lat + direction * (Math.cos(headingRad) * moveStepMeters) / 110540.0;
 
-            if (canMoveToPosition(newLon, newLat)) {  // objIndex=0 for duck
+            if (tryMoveTo(newLon, newLat)) {  // objIndex=0 for duck
                 state.lon = newLon;
                 state.lat = newLat;
                 updateAllModels();
@@ -337,7 +436,7 @@
         }
 
         //leftOrRight: 1 = Right, -1 = Left
-        function moveElementRotate(elemIdx, leftOrRight){
+        function moveElementRotate(elemIdx, leftOrRight) {
             if (sceneModels.length === 0) return;
 
             const state = sceneModels[elemIdx].state;  // Select object
@@ -345,7 +444,7 @@
             const headingRad = Cesium.Math.toRadians(state.headingDeg);
 
             const direction = leftOrRight;
-            state.headingDeg += (direction*rotStepDeg);
+            state.headingDeg += (direction * rotStepDeg);
             updateAllModels();
         }
 
@@ -402,66 +501,66 @@
 
         selectBtn.addEventListener('click', () => fileInput.click());
         fileInput.addEventListener('change', async (event) => {
-        const files = Array.from(event.target.files);
-        for (const file of files) {
-            console.log(`Selected: ${file.name} (${file.size} bytes)`);
+            const files = Array.from(event.target.files);
+            for (const file of files) {
+                console.log(`Selected: ${file.name} (${file.size} bytes)`);
 
-            const url = URL.createObjectURL(file);
-            console.log(url);
+                const url = URL.createObjectURL(file);
+                console.log(url);
 
-            try {
-            const model = await Cesium.Model.fromGltfAsync({
-                url: url,
-                scale: 10.0,
-                show: true,
-                id: sceneModels.length,   
-                enableModelExperimental: true
-            });
+                try {
+                    const model = await Cesium.Model.fromGltfAsync({
+                        url: url,
+                        scale: 10.0,
+                        show: true,
+                        id: sceneModels.length,
+                        enableModelExperimental: true
+                    });
 
-            // Position model near some lon/lat (Berlin center in your app)
-            const lon = 13.4050;
-            const lat = 52.5200;
-            const height = 1.8; // meters above ground
-            // Sample terrain height at exact coordinates
-            const carto = Cesium.Cartographic.fromDegrees(lon, lat);
-            const [updated] = await Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, [carto]);
-            const terrainHeight = updated.height || 0;
+                    // Position model near some lon/lat (Berlin center in your app)
+                    const lon = 13.4050;
+                    const lat = 52.5200;
+                    const height = 1.8; // meters above ground
+                    // Sample terrain height at exact coordinates
+                    const carto = Cesium.Cartographic.fromDegrees(lon, lat);
+                    const [updated] = await Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, [carto]);
+                    const terrainHeight = updated.height || 0;
 
-            // Add safety offset ABOVE terrain (3m total)
-            const finalHeight = terrainHeight + 1.0;
+                    // Add safety offset ABOVE terrain (3m total)
+                    const finalHeight = terrainHeight + 1.0;
 
-            const position = Cesium.Cartesian3.fromDegrees(lon, lat, height);
-            const headingDeg = 0;  // force no rotation
-            const hpr = new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(headingDeg), 0, 0);
-            const modelMatrix = Cesium.Transforms.headingPitchRollToFixedFrame(position, hpr);
-            model.modelMatrix = modelMatrix;
+                    const position = Cesium.Cartesian3.fromDegrees(lon, lat, height);
+                    const headingDeg = 0;  // force no rotation
+                    const hpr = new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(headingDeg), 0, 0);
+                    const modelMatrix = Cesium.Transforms.headingPitchRollToFixedFrame(position, hpr);
+                    model.modelMatrix = modelMatrix;
 
-            viewer.scene.primitives.add(model);
-            sceneModels.push({
-                model,
-                state: {
-                    name: file.name,
-                    lon,
-                    lat,
-                    headingDeg,
-                    terrainHeight,
-                    finalHeight,
-                    height: finalHeight,
-                    scale: 10.0
+                    viewer.scene.primitives.add(model);
+                    sceneModels.push({
+                        model,
+                        state: {
+                            name: file.name,
+                            lon,
+                            lat,
+                            headingDeg,
+                            terrainHeight,
+                            finalHeight,
+                            height: finalHeight,
+                            scale: 10.0
+                        }
+                    });
+                    console.log('Model loaded and added!');
+
+                    // Fly camera to model so you can see it
+                    flyCameraToStreetView(lon, lat);
+                } catch (e) {
+                    console.error('Failed to load model:', e);
                 }
-            });
-            console.log('Model loaded and added!');
-
-            // Fly camera to model so you can see it
-            flyCameraToStreetView(lon, lat);
-            } catch (e) {
-            console.error('Failed to load model:', e);
             }
-        }
 
-        fileInput.value = '';
+            fileInput.value = '';
         });
-        
+
         const handler = new Cesium.ScreenSpaceEventHandler(viewer.canvas);
 
         handler.setInputAction(function (movement) {
@@ -474,7 +573,7 @@
             }
         }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
         //--------------------------------------------------------
-        
+
         // Put near your other globals
         let isDragging = false;
         let dragIndex = -1;
@@ -505,46 +604,46 @@
         const dragHandler = new Cesium.ScreenSpaceEventHandler(viewer.canvas);
 
         dragHandler.setInputAction(function (click) {
-        const picked = viewer.scene.pick(click.position);
-        if (!Cesium.defined(picked)) return;
-        const idx = picked.id;
-        if (typeof idx === 'number' && sceneModels[idx]) {
-            currentElement = idx;
-            console.log("ELement selected for movement")
-        }else{
-            console.log("Element not found");
-            return;
-        }
+            const picked = viewer.scene.pick(click.position);
+            if (!Cesium.defined(picked)) return;
+            const idx = picked.id;
+            if (typeof idx === 'number' && sceneModels[idx]) {
+                currentElement = idx;
+                console.log("ELement selected for movement")
+            } else {
+                console.log("Element not found");
+                return;
+            }
 
-        const lonlat = screenToLonLat(click.position);
+            const lonlat = screenToLonLat(click.position);
 
-        if (!lonlat) return;
+            if (!lonlat) return;
 
-        isDragging = true;
-        dragIndex = idx;
-        currentElement = idx;                 // also update your currentElement
-        dragStartLonLat = { ...sceneModels[idx].state };  // copy current state lon/lat
+            isDragging = true;
+            dragIndex = idx;
+            currentElement = idx;                 // also update your currentElement
+            dragStartLonLat = { ...sceneModels[idx].state };  // copy current state lon/lat
 
-        viewer.scene.screenSpaceCameraController.enableRotate = false;
-        viewer.scene.screenSpaceCameraController.enableTranslate = false;
-        viewer.scene.screenSpaceCameraController.enableZoom = false;
+            viewer.scene.screenSpaceCameraController.enableRotate = false;
+            viewer.scene.screenSpaceCameraController.enableTranslate = false;
+            viewer.scene.screenSpaceCameraController.enableZoom = false;
 
         }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
-// Mouse move: object follows mouse EXACTLY
-dragHandler.setInputAction(function (movement) {
-  if (!isDragging || dragIndex < 0 || !sceneModels[dragIndex]) return;
+        // Mouse move: object follows mouse EXACTLY
+        dragHandler.setInputAction(function (movement) {
+            if (!isDragging || dragIndex < 0 || !sceneModels[dragIndex]) return;
 
-  // Get lon/lat DIRECTLY under mouse cursor
-  const mouseLonLat = screenToLonLat(movement.endPosition);
-  if (!mouseLonLat) return;
+            // Get lon/lat DIRECTLY under mouse cursor
+            const mouseLonLat = screenToLonLat(movement.endPosition);
+            if (!mouseLonLat) return;
 
-  // Set object position to EXACTLY where the mouse is
-  const state = sceneModels[dragIndex].state;
-  state.lon = mouseLonLat.lon;
-  state.lat = mouseLonLat.lat;
+            // Set object position to EXACTLY where the mouse is
+            const state = sceneModels[dragIndex].state;
+            state.lon = mouseLonLat.lon;
+            state.lat = mouseLonLat.lat;
 
-  updateAllModels();
-}, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+            updateAllModels();
+        }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
 
         // Mouse up: stop dragging
         function endDrag() {
