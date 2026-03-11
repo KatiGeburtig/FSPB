@@ -17,8 +17,8 @@
 
         #streetViewBtn {
             position: absolute;
-            top: 10px;
-            left: 10px;
+            bottom: 10px;
+            right: 60px;
             z-index: 1000;
             padding: 12px 20px;
             background: #007cba;
@@ -50,13 +50,33 @@
 
         #uiControls {
             position: absolute;
-            bottom: 20px;
-            left: 20px;
+            bottom: 150px;
+            left: 100px;
             z-index: 1000;
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 8px;
+        }
+
+        #mapControls {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            z-index: 1000;
+            color: white;
+            padding: 15px;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* Vertical stack for zoom buttons */
+        #zoomControls {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
         }
 
         @keyframes shake {
@@ -81,7 +101,7 @@
 
         #coordsPanel {
             position: absolute;
-            top: 70px;
+            top: 10px;
             left: 10px;
             z-index: 1000;
             background: rgba(0, 0, 0, 0.85);
@@ -93,6 +113,40 @@
             font-size: 13px;
         }
 
+        #movementCross {
+            position: relative;
+            width: 60px;
+            height: 60px;
+            margin: 20px 0;
+        }
+
+        #moveForwardBtn {
+            position: absolute;
+            top: -60px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        #rotateLeftBtn {
+            position: absolute;
+            left: -60px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        #rotateRightBtn {
+            position: absolute;
+            right: -60px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        #moveBackwardBtn {
+            position: absolute;
+            bottom: -60px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
         .coord-row {
             margin: 8px 0;
         }
@@ -117,7 +171,6 @@
 
 <body>
     <div id="cesiumContainer"></div>
-    <button id="streetViewBtn">Street View Berlin</button>
     <div id="info">
         <strong>Controls:</strong><br>
         Arrows = Movement/rotation<br>
@@ -144,22 +197,37 @@
             <span class="coord-label">Heading:</span>
             <input type="number" id="newHeading" value="0">
         </div>
+        
+        <button class="ctrl-btn" id="selectFileBtn" style="background-color: gray; color: aliceblue;">Add new object</button>
+        <input type="file" id="fileInput" accept=".glb,.gltf" style="display:none;">
         <button id="updateBtn">Teleport Element</button>
+
     </div>
 
     <!-- On-screen controls -->
     <div id="uiControls">
-        <div class="control-row">
-            <button class="ctrl-btn" id="zoomInBtn">Zoom +</button>
-            <button class="ctrl-btn" id="zoomOutBtn">Zoom -</button>
-            <button class="ctrl-btn" id="rotateLeftBtn">Rotate L</button>
-            <button class="ctrl-btn" id="rotateRightBtn">Rotate R</button>
-            <button class="ctrl-btn" id="moveForwardBtn">Forward</button>
-            <button class="ctrl-btn" id="moveBackwardBtn">Backwards</button>
-
-            <button class="ctrl-btn" id="selectFileBtn">Select 3D Model</button>
-            <input type="file" id="fileInput" accept=".glb,.gltf" style="display:none;">
+        <div id="movementCross">
+            <button class="ctrl-btn" id="rotateLeftBtn">
+                <img src="/icon/links.png" style="width: 32px; height: 32px;">
+            </button>
+            <button class="ctrl-btn" id="rotateRightBtn">
+                <img src="/icon/rechts.png" style="width: 32px; height: 32px;">
+            </button>
+            <button class="ctrl-btn" id="moveForwardBtn">
+                <img src="/icon/hoch.png" style="width: 32px; height: 32px;">
+            </button>
+            <button class="ctrl-btn" id="moveBackwardBtn">
+                <img src="/icon/unten.png" style="width: 32px; height: 32px;">
+            </button>
         </div>
+    </div>
+
+    <div id="mapControls">
+        <div id="zoomControls">
+            <button class="ctrl-btn" id="zoomInBtn" style="width: 30px; height: 30px;" >+</button>
+            <button class="ctrl-btn" id="zoomOutBtn" style="width: 30px; height: 30px;">-</button>
+        </div>
+        <button id="streetViewBtn">Street View Berlin</button>
     </div>
 
     <script>
