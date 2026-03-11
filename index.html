@@ -286,106 +286,26 @@
             const dirVec = Cesium.Cartesian3.subtract(ground, origin, new Cesium.Cartesian3());
             const direction = Cesium.Cartesian3.normalize(dirVec, new Cesium.Cartesian3());
             const ray = new Cesium.Ray(origin, direction);
-            const result = scene.pickFromRay(ray, [buildingsTileset]);
-            console.log("pickFromRay result", result);
-            if (!result) return false;
+            const result = scene.pickFromRay(ray, sceneModels.map(e => e.model));
+            if (!result || !result.object) return false;
 
             // ✅ Check primitive property (standard for 3D Tiles)
-            const primitive = result.object.primitive;          
+            const primitive = result.object.primitive;
             const isBuildingHit = primitive === buildingsTileset;
             
-            console.log("primitive === buildingsTileset?", isBuildingHit, primitive);
             return isBuildingHit;
         }
 
-        // returns true if the segment old -> next intersects any OSM building
-        function hitsBuilding(newLon, newLat, scene, buildingsTileset) {
-           // Cartesian position slightly above the ground at the target lon/lat
-            const cart3 = Cesium.Cartesian3.fromDegrees(newLon, newLat, 2.0);
-
-            // Ray straight down
-            const down = Cesium.Cartesian3.negate(
-                Cesium.Cartesian3.UNIT_Z,
-                new Cesium.Cartesian3()
-            );
-            const ray = new Cesium.Ray(cart3, down);
-
-            // Pick only against the OSM buildings tileset
-            const result = scene.pickFromRay(ray, [buildingsTileset]);
-            if (!result) return false;
-
-            // If the picked object belongs to the buildings tileset, we are above a building
-            return result.object?.tileset === buildingsTileset;
-        }
-
-        function canMoveToPosition(lon, lat) {
-            // no buildingsTileset yet = allow movement
-            console.log("hier");
-            if ((buildingsTileset == null)) {
-                console.log("no buildingsTileset yet");
-                return fr;
-            }
-            console.log("move2postion");
-            const collision = isOnBuilding(lon, lat);
-            //const collision = hitsBuilding(lon, lat,viewer.scene,buildingsTileset);
-
-            return !collision;
-        }
-
         // after a successful move, update currentLon/currentLat
-        function tryMoveTo(lon, lat) {
-            console.log("try2Move");
-            const tmp = hasBuildingAt(lon, lat);
-            if (tmp) {
-                return true;
-                // update entity/camera here
-            } else {
+        function canMoveTo(lon, lat) {
+            const onBuilding = isOnBuilding(lon, lat);
+            if (onBuilding) {
                 console.log("blocked: would move into a building");
                 return false;
+            } else {
+                return true;
             }
         }
-
-async function hasBuildingAt(lon, lat) {
-    // Get terrain height (ground level)
-    const carto = Cesium.Cartographic.fromDegrees(lon, lat);
-    const [terrainPos] = await Cesium.sampleTerrainMostDetailed(
-        viewer.terrainProvider, 
-        [carto]
-    );
-    const terrainHeight = terrainPos.height || 0;
-    
-    // Get scene height (includes buildings)
-    const sceneHeight = viewer.scene.sampleHeightMostDetailed([carto])[0] || 0;
-     // If we're excluding a specific model, check if it interfered
-    if (currentElement > -1) {
-        // Temporarily hide the model to get clean height
-        const model = sceneModels.find(m => m.model.customId === currentElement)?.model;
-        if (model) {
-            const wasVisible = model.show;
-            model.show = false;
-            
-            // Force scene update
-            viewer.scene.requestRender();
-            await new Promise(r => setTimeout(r, 10));
-            
-            // Sample height without the model
-            sceneHeight = viewer.scene.sampleHeightMostDetailed([carto])[0] || 0;
-            
-            // Restore model visibility
-            model.show = wasVisible;
-            viewer.scene.requestRender();
-        }
-    }
-    
-    // Building exists if scene height is significantly higher than terrain
-    const heightDiff = sceneHeight - terrainHeight;
-    const hasBuilding = heightDiff > 3.0; // 3m threshold
-    
-    console.log(`lon:${lon.toFixed(6)} lat:${lat.toFixed(6)} | terrain:${terrainHeight.toFixed(1)}m | scene:${sceneHeight.toFixed(1)}m | building:${hasBuilding}`);
-    
-    return hasBuilding;
-}
-
 
         function updateCoordDisplay() {
             if (!sceneModels[currentElement]) return;
@@ -424,7 +344,7 @@ async function hasBuildingAt(lon, lat) {
             const newLon = state.lon + direction * (Math.sin(headingRad) * moveStepMeters) / 111320.0;
             const newLat = state.lat + direction * (Math.cos(headingRad) * moveStepMeters) / 110540.0;
 
-            if (tryMoveTo(newLon, newLat)) {  // objIndex=0 for duck
+            if (canMoveTo(newLon, newLat)) {
                 state.lon = newLon;
                 state.lat = newLat;
                 updateAllModels();
@@ -453,6 +373,10 @@ async function hasBuildingAt(lon, lat) {
             state.lon = parseFloat(lon);
             state.lat = parseFloat(lat);
             state.headingDeg = parseFloat(heading);
+
+            if(!canMoveTo(lon, lat)){
+                console.log("Blocked");
+            }
 
             Cesium.sampleTerrainMostDetailed(viewer.terrainProvider,
                 [Cesium.Cartographic.fromDegrees(state.lon, state.lat)])
@@ -572,12 +496,15 @@ async function hasBuildingAt(lon, lat) {
                 console.log('currentElement =', currentElement, sceneModels[idx].state.name);
             }
         }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
         //--------------------------------------------------------
 
         // Put near your other globals
         let isDragging = false;
         let dragIndex = -1;
         let dragStartLonLat = null;
+        let dragStartLon = 0;
+        let dragStartLat = 0;
 
         // Helper: screen position → lon/lat on globe/terrain
         function screenToLonLat(windowPosition) {
@@ -622,6 +549,8 @@ async function hasBuildingAt(lon, lat) {
             isDragging = true;
             dragIndex = idx;
             currentElement = idx;                 // also update your currentElement
+            dragStartLat = sceneModels[idx].state.lat;
+            dragStartLon = sceneModels[idx].state.lon;
             dragStartLonLat = { ...sceneModels[idx].state };  // copy current state lon/lat
 
             viewer.scene.screenSpaceCameraController.enableRotate = false;
@@ -638,9 +567,15 @@ async function hasBuildingAt(lon, lat) {
             if (!mouseLonLat) return;
 
             // Set object position to EXACTLY where the mouse is
+            
             const state = sceneModels[dragIndex].state;
             state.lon = mouseLonLat.lon;
             state.lat = mouseLonLat.lat;
+
+            if(!canMoveTo(mouseLonLat.lon, mouseLonLat.lat)){
+                sceneModels[dragIndex].state.lon = dragStartLon;
+                sceneModels[dragIndex].state.lat = dragStartLat;
+            }
 
             updateAllModels();
         }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
