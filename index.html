@@ -37,7 +37,7 @@
         #info {
             position: absolute;
             top: 10px;
-            right: 10px;
+            right: 50px;
             z-index: 1000;
             background: rgba(0, 0, 0, 0.7);
             color: white;
@@ -185,7 +185,9 @@
     <div id="cesiumContainer"></div>
     <div id="info">
         <strong>Controls:</strong><br>
-        Arrows = Movement/rotation<br>
+        WASD = Movement on Map<br>
+        Arrows = Movement/rotation of Element<br>
+        Mouse + Click = Movement of Element <br>
         Mouse = Look around<br>
         Click on Element = Selection<br>
     </div>
@@ -218,7 +220,6 @@
 
     </div>
 
-    <!-- On-screen controls -->
     <div id="uiControls">
         <div id="movementCross">
             <button class="ctrl-btn" id="rotateLeftBtn">
@@ -248,15 +249,6 @@
             <button class="ctrl-btn" id="zoomInBtn" style="width: 30px; height: 30px;">+</button>
             <button class="ctrl-btn" id="zoomOutBtn" style="width: 30px; height: 30px;">-</button>
         </div>
-        <div id="mapPanControls" style="display: flex; flex-direction: column; gap: 4px; margin-right: 12px;">
-            <button class="ctrl-btn" id="mapMoveForwardBtn">Map ↑</button>
-            <div style="display:flex; gap:4px; justify-content:center;">
-                <button class="ctrl-btn" id="mapMoveLeftBtn">←</button>
-                <button class="ctrl-btn" id="mapMoveRightBtn">→</button>
-            </div>
-            <button class="ctrl-btn" id="mapMoveBackwardBtn">Map ↓</button>
-        </div>
-
         <button id="streetViewBtn">Street View Berlin</button>
     </div>
 
@@ -607,15 +599,15 @@
         const camera = viewer.camera;
 
         function panCameraForward(amount = 10.0) {
-            camera.moveUp(amount);
+            camera.moveForward(amount);   // along view vector[web:31][web:37]
         }
 
         function panCameraBackward(amount = 10.0) {
-            camera.moveDown(amount);
+            camera.moveBackward(amount);
         }
 
         function panCameraLeft(amount = 10.0) {
-            camera.moveLeft(amount);
+            camera.moveLeft(amount);      // along -right vector[web:31][web:37]
         }
 
         function panCameraRight(amount = 10.0) {
@@ -637,15 +629,6 @@
         document.getElementById('rotateRightBtn').addEventListener('click', () => moveElementRotate(currentElement, 1));
         document.getElementById('moveForwardBtn').addEventListener('click', () => moveElementForNBack(currentElement, 1));
         document.getElementById('moveBackwardBtn').addEventListener('click', () => moveElementForNBack(currentElement, -1));
-        const mapMoveForwardBtn = document.getElementById('mapMoveForwardBtn');
-        const mapMoveBackwardBtn = document.getElementById('mapMoveBackwardBtn');
-        const mapMoveLeftBtn = document.getElementById('mapMoveLeftBtn');
-        const mapMoveRightBtn = document.getElementById('mapMoveRightBtn');
-
-        mapMoveForwardBtn.addEventListener('click', () => panCameraForward(10));
-        mapMoveBackwardBtn.addEventListener('click', () => panCameraBackward(10));
-        mapMoveLeftBtn.addEventListener('click', () => panCameraLeft(10));
-        mapMoveRightBtn.addEventListener('click', () => panCameraRight(10));
 
         zoomToObjBtn.addEventListener('click', () => {
             if (zoomTargetSelect.options.length === 0) return;
