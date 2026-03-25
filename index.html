@@ -186,16 +186,16 @@
     <div id="info">
         <strong>Controls:</strong><br>
         WASD = Movement on Map<br>
-        Arrows = Movement/rotation of Element<br>
-        Mouse + Click = Movement of Element <br>
-        Mouse = Look around<br>
         Click on Element = Selection<br>
+        Arrows = Movement/rotation of Element<br>
+        Mouse + Drag = Movement of Element <br>
+        Mouse + Click = Look around<br>
     </div>
 
     <div id="coordsPanel">
         <div class="coord-row"><span class="coord-label">Lon:</span> <span id="currentLon">13.4050</span></div>
         <div class="coord-row"><span class="coord-label">Lat:</span> <span id="currentLat">52.5200</span></div>
-        <div class="coord-row"><span class="coord-label">Dir:</span> <span id="currentHeading">0°</span></div>
+        <div class="coord-row"><span class="coord-label">Dir:</span> <span id="currentHeading">0</span></div>
 
         <hr style="margin: 12px 0; border-color: #555;">
 
@@ -223,10 +223,10 @@
     <div id="uiControls">
         <div id="movementCross">
             <button class="ctrl-btn" id="rotateLeftBtn">
-                <img src="/icon/links.png" style="width: 32px; height: 32px;">
+                <img src="/icon/rechts.png" style="width: 32px; height: 32px;">
             </button>
             <button class="ctrl-btn" id="rotateRightBtn">
-                <img src="/icon/rechts.png" style="width: 32px; height: 32px;">
+                <img src="/icon/links.png" style="width: 32px; height: 32px;">
             </button>
             <button class="ctrl-btn" id="moveForwardBtn">
                 <img src="/icon/hoch.png" style="width: 32px; height: 32px;">
@@ -276,9 +276,9 @@
             zoomToObjBtn.style.cursor = 'pointer';
             sceneModels.forEach((entry, index) => {
                 const opt = document.createElement('option');
-                const name = entry.state && entry.state.name ? entry.state.name : `Object ${index}`;
+                const name = entry.state && entry.state.name ? entry.state.name : `Object ${index + 1}`;
                 opt.value = index;
-                opt.textContent = `${index}: ${name}`;
+                opt.textContent = `${index + 1}: ${name}`;
                 zoomTargetSelect.appendChild(opt);
             });
         }
@@ -577,8 +577,14 @@
         window.addEventListener("keydown", (e) => {
             // Arrow Up/Down = Forward/Backwardwindow.addEventListener("keydown", (e) => {
             const hasCurrent = currentElement >= 0 && sceneModels[currentElement];
+            console.log("Key event:", {
+                key: e.key,
+                code: e.code,
+                which: e.which,
+                ctrl: e.ctrlKey,
+                shift: e.shiftKey
+            });
 
-            // Example: 'WASD' for camera, Arrows for object (when available)
             if (!hasCurrent) {
                 if (e.key === 'w' || e.key === 'W') panCameraForward(10);
                 if (e.key === 's' || e.key === 'S') panCameraBackward(10);
@@ -613,7 +619,6 @@
         function panCameraRight(amount = 10.0) {
             camera.moveRight(amount);
         }
-
 
         // 5) Event listeners
         document.getElementById('streetViewBtn').addEventListener('click', () => flyCameraToStreetView(13.4050, 52.5200));
@@ -813,6 +818,60 @@
         }
 
         dragHandler.setInputAction(endDrag, Cesium.ScreenSpaceEventType.LEFT_UP);
+
+        let buttonHoldInterval = null;
+
+        function setupRepeatButton(button, onTick, opts = {}) {
+            const { delay = 200, interval = 50 } = opts;
+            function startHold() {
+                if (buttonHoldInterval) return;
+                onTick(); // fire once immediately
+                buttonHoldInterval = window.setInterval(onTick, interval);
+            }
+
+            function stopHold() {
+                if (buttonHoldInterval) {
+                    clearInterval(buttonHoldInterval);
+                    buttonHoldInterval = null;
+                }
+            }
+
+            button.addEventListener('mousedown', startHold);
+            button.addEventListener('touchstart', startHold);
+
+            button.addEventListener('mouseup', stopHold);
+            button.addEventListener('mouseleave', stopHold);
+            button.addEventListener('touchend', stopHold);
+            button.addEventListener('touchcancel', stopHold);
+        }
+
+        // Arrows → move/rotate
+        function tickMoveForward() {
+            if (currentElement >= 0 && sceneModels[currentElement]) {
+                moveElementForNBack(currentElement, 1);
+            }
+        }
+        function tickMoveBackward() {
+            if (currentElement >= 0 && sceneModels[currentElement]) {
+                moveElementForNBack(currentElement, -1);
+            }
+        }
+        function tickRotateLeft() {
+            if (currentElement >= 0 && sceneModels[currentElement]) {
+                moveElementRotate(currentElement, -1);
+            }
+        }
+        function tickRotateRight() {
+            if (currentElement >= 0 && sceneModels[currentElement]) {
+                moveElementRotate(currentElement, 1);
+            }
+        }
+
+        setupRepeatButton(moveForwardBtn, tickMoveForward);
+        setupRepeatButton(moveBackwardBtn, tickMoveBackward);
+        setupRepeatButton(rotateLeftBtn, tickRotateLeft);
+        setupRepeatButton(rotateRightBtn, tickRotateRight);
+
 
         // 6) Initialize
         (async function init() {
