@@ -15,7 +15,7 @@ Der Fokus liegt auf der Untersuchung interaktiver Funktionen für Stadtplanung u
 project/
 │── index.html      # Hauptseite
 │── styles.css      # Styling der UI
-│── app.js          # Hauptlogik (Cesium + Interaktionen)
+│── function.js          # Hauptlogik (Cesium + Interaktionen)
 │── /assets         # 3D Modelle (zum Hinzufügen)
 │── /icon           # UI Icons
 ```
@@ -37,7 +37,7 @@ Für die Nutzung von Cesium Ion benötigst du einen Access Token:
 
 1. Registrieren auf: https://ion.cesium.com/signin/tokens
 2. Token generieren
-3. In `app.js` eintragen/ersetzen:
+3. In `function.js` eintragen/ersetzen:
 
 ```javascript
 Cesium.Ion.defaultAccessToken = "DEIN_TOKEN";
