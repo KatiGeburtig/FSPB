@@ -1,0 +1,173 @@
+ html,
+        body,
+        #cesiumContainer {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        #streetViewBtn {
+            position: absolute;
+            bottom: 10px;
+            right: 60px;
+            z-index: 1000;
+            padding: 12px 20px;
+            background: #007cba;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        #streetViewBtn:hover {
+            background: #005a87;
+        }
+
+        #info {
+            position: absolute;
+            top: 10px;
+            right: 50px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 12px;
+            max-width: 300px;
+        }
+
+        #uiControls {
+            position: absolute;
+            bottom: 150px;
+            left: 100px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #moveToObject {
+            position: absolute;
+            bottom: 50px;
+            left: 50px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #mapControls {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            z-index: 1000;
+            color: white;
+            padding: 15px;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* Vertical stack for zoom buttons */
+        #zoomControls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            25% {
+                transform: translateX(-5px);
+            }
+
+            75% {
+                transform: translateX(5px);
+            }
+        }
+
+        .building-collision {
+            animation: shake 0.3s ease-in-out;
+        }
+
+        #coordsPanel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            min-width: 220px;
+            font-family: monospace;
+            font-size: 13px;
+        }
+
+        #movementCross {
+            position: relative;
+            width: 60px;
+            height: 60px;
+            margin: 20px 0;
+        }
+
+        #moveForwardBtn {
+            position: absolute;
+            top: -60px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        #rotateLeftBtn {
+            position: absolute;
+            left: -60px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        #rotateRightBtn {
+            position: absolute;
+            right: -60px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        #moveBackwardBtn {
+            position: absolute;
+            bottom: -60px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .coord-row {
+            margin: 8px 0;
+        }
+
+        .coord-label {
+            color: #4CAF50;
+            font-weight: bold;
+            min-width: 70px;
+            display: inline-block;
+        }
+
+        input[type="number"] {
+            width: 90px;
+            padding: 4px;
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 3px;
+        }
